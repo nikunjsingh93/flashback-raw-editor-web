@@ -1,3 +1,16 @@
+## This fork: GitHub Pages
+
+[Open Flashback RAW Editor](https://nikunjsingh93.github.io/flashback-raw-editor-web/)
+
+This independent fork retains the upstream GPL-3.0 license and credits.
+Changes adapt asset URLs, the install manifest and offline worker to a GitHub Pages repository subfolder. Worker cleanup is restricted to this app so other Pages apps retain their offline caches.
+
+Pushes to main build and publish dist through GitHub Actions. For a matching local build: set VITE_BASE_PATH=/flashback-raw-editor-web/ and run npm run build.
+
+Android requires a browser/device with WebGPU. Load the app and use each film look while online before relying on offline operation.
+
+---
+
 <p align="center">
   <img src="public/icons/icon.svg" alt="Flashback icon" width="96" height="96">
 </p>

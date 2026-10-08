@@ -431,7 +431,7 @@ export const VIBE_PRESETS = {
     vignette_feather:  0.40,    // vignette_curve=66 → 2^(-66/50)=0.40
     bloom:             0.15,
     halation_strength: 0.40,
-    lut:               '/assets/luts/disposable.cube',
+    lut:               `${import.meta.env.BASE_URL}assets/luts/disposable.cube`,
     base_push_ev:      0,
     b_push_boost:      0,
   },
@@ -447,7 +447,7 @@ export const VIBE_PRESETS = {
     vignette_feather:  1.00,    // vignette_curve=0 → neutral
     bloom:             0.10,
     halation_strength: 0.30,
-    lut:               '/assets/luts/pointandshoot.cube',
+    lut:               `${import.meta.env.BASE_URL}assets/luts/pointandshoot.cube`,
     base_push_ev:      0,
     b_push_boost:      0,
   },
@@ -463,7 +463,7 @@ export const VIBE_PRESETS = {
     vignette_feather:  1.00,
     bloom:             0.050,
     halation_strength: 0.20,
-    lut:               '/assets/luts/rangefinder.cube',
+    lut:               `${import.meta.env.BASE_URL}assets/luts/rangefinder.cube`,
     base_push_ev:      0,
     b_push_boost:      0,
   },
@@ -479,7 +479,7 @@ export const VIBE_PRESETS = {
     vignette_feather:  1.00,
     bloom:             0.050,
     halation_strength: 0.15,
-    lut:               '/assets/luts/monochrome.cube',
+    lut:               `${import.meta.env.BASE_URL}assets/luts/monochrome.cube`,
     base_push_ev:      0,
   },
   flashback_v1: {
@@ -494,7 +494,7 @@ export const VIBE_PRESETS = {
     vignette_feather:  0.40,    // vignette_curve=66 → 2^(-66/50)=0.40
     bloom:             0.030,
     halation_strength: 0.35,
-    lut:               '/assets/luts/V1.cube',
+    lut:               `${import.meta.env.BASE_URL}assets/luts/V1.cube`,
     // The V1 look's LUT is trained WITHOUT the +2 EV lift the other looks use
     // (upstream flashback_classic_v1 sets base_exposure_offset_v2 = 0).
     base_lift_ev:      0,

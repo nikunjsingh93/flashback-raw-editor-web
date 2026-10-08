@@ -10,18 +10,20 @@
 // Bumping CACHE_NAME changes this file's bytes, which makes the browser detect
 // an updated worker, install it, and purge older caches in `activate`. Bump it
 // whenever the precache list or strategy changes.
-const CACHE_NAME = 'flashback-v44';  // v44: v1.3.4 — health-audit cleanup (dead code removed, dev/prod header parity, doc fixes)
+const APP_ROOT = new URL('./', self.registration.scope);
+const CACHE_PREFIX = 'flashback-pages-' + encodeURIComponent(APP_ROOT.pathname) + '-';
+const CACHE_NAME = CACHE_PREFIX + 'v45';
 
 // Files to pre-cache on install (app shell).
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon.svg',
-  '/icons/icon-180.png',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-];
+  './',
+  './index.html',
+  './manifest.json',
+  './icons/icon.svg',
+  './icons/icon-180.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+].map((file) => new URL(file, APP_ROOT).href);
 
 // ─── Install: pre-cache app shell ───────────────────────────────────────────
 // NOTE: we deliberately do NOT call skipWaiting() here. A freshly installed
@@ -45,7 +47,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k !== CACHE_NAME)
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME)
           .map((k) => caches.delete(k))
       )
     ).then(() => self.clients.claim())
@@ -58,14 +60,14 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== location.origin) return; // only handle same-origin
+  if (url.origin !== APP_ROOT.origin || !url.pathname.startsWith(APP_ROOT.pathname)) return;
 
   // Navigations + HTML: network-first so redeploys aren't served stale. Falls
   // back to the cached shell when offline. We normalise the cache key to '/'
   // so the precached shell always satisfies the offline fallback.
   const isNavigation =
     request.mode === 'navigate' ||
-    url.pathname === '/' ||
+    url.pathname === APP_ROOT.pathname ||
     url.pathname.endsWith('.html');
 
   if (isNavigation) {
@@ -77,7 +79,7 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() =>
-          caches.match(request).then((hit) => hit || caches.match('/'))
+          caches.match(request).then((hit) => hit || caches.match(APP_ROOT.href))
         )
     );
     return;

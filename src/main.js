@@ -121,7 +121,7 @@ const vibePills = document.querySelectorAll('.vibe-pill[data-vibe]');
 if ('serviceWorker' in navigator) {
   if (import.meta.env.PROD) {
     // Production: register the offline cache.
-    navigator.serviceWorker.register('/sw.js').then((reg) => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL }).then((reg) => {
       console.log('[sw] Registered, scope:', reg.scope);
 
       // Update flow: a new worker installs but WAITS (sw.js no longer
@@ -171,10 +171,11 @@ if ('serviceWorker' in navigator) {
     // (the cause of duplicated logs / "my edits aren't showing up"). Tear down
     // any SW + caches left over from a previous prod build or session.
     navigator.serviceWorker.getRegistrations().then((regs) => {
-      regs.forEach((r) => r.unregister());
+      const scope = new URL(import.meta.env.BASE_URL, location.origin).href;
+      regs.filter((r) => r.scope === scope).forEach((r) => r.unregister());
     });
     if (window.caches?.keys) {
-      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+      caches.keys().then((keys) => keys.filter((k) => k.startsWith('flashback-pages-' + encodeURIComponent(new URL(import.meta.env.BASE_URL, location.origin).pathname) + '-')).forEach((k) => caches.delete(k)));
     }
   }
 }

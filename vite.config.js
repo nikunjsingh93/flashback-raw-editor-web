@@ -8,6 +8,8 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const BUILD_ID = `v${pkg.version}`;
 
 export default defineConfig({
+  // GitHub Pages project sites are served below the repository name.
+  base: process.env.VITE_BASE_PATH || '/',
   define: {
     __BUILD_ID__: JSON.stringify(BUILD_ID),
   },

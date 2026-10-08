@@ -32,10 +32,10 @@ import { Effects } from './effects.js';
 /** Grain tiles (Refinement B — tile, not noise). All four are packed into a
  *  2×2 atlas so grain uses every original tile and repeats far less visibly. */
 const GRAIN_TILE_URLS = [
-  '/assets/grain/grain_01.png',
-  '/assets/grain/grain_02.png',
-  '/assets/grain/grain_03.png',
-  '/assets/grain/grain_04.png',
+  `${import.meta.env.BASE_URL}assets/grain/grain_01.png`,
+  `${import.meta.env.BASE_URL}assets/grain/grain_02.png`,
+  `${import.meta.env.BASE_URL}assets/grain/grain_03.png`,
+  `${import.meta.env.BASE_URL}assets/grain/grain_04.png`,
 ];
 
 // Shader URLs (Vite resolves & copies these for dev + build).
