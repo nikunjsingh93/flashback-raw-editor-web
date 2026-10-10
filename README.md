@@ -2,6 +2,10 @@
 
 [Open Flashback RAW Editor](https://nikunjsingh93.github.io/flashback-raw-editor-web/)
 
+### Apply one film look to a roll and download ZIP
+
+Open several photos, choose a film (for example Disposable), then tap **Apply look to all** below the preview. This copies the current film look and adjustments while keeping each photo's crop, rotation and Auto WB. Tap **Download ZIP** to develop every included photo and save one archive of processed JPEGs (or TIFFs, selected in Settings or by long-pressing Download ZIP). Excluded photos stay out of the archive. All processing stays on your device.
+
 This independent fork retains the upstream GPL-3.0 license and credits.
 Changes adapt asset URLs, the install manifest and offline worker to a GitHub Pages repository subfolder. Worker cleanup is restricted to this app so other Pages apps retain their offline caches.
 

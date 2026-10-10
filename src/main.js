@@ -11,6 +11,7 @@
 import { initSliders, setSliderValue } from './ui/sliders.js';
 import { loadSettings, saveSettings, applyVibeOrder, initSettings, applyTheme } from './ui/settings.js';
 import { encodeJpegFile, encodeTiffFile, deliverFiles } from './ui/export.js';
+import { createZipFile } from './ui/zip.js';
 import { factoryStateFor, VIBE_PRESETS, DEFAULT_CONFIG } from './core/config.js';
 import {
   loadOne, saveOne, hasSaved, clearOne, saveSession, loadSession,
@@ -409,7 +410,7 @@ function lutDisplayName(path) {
  * is correct before openImage renders for the first time.
  */
 async function _applyVibeConfig(vibeId) {
-  if (!(vibeId in VIBE_PRESETS) || vibeId === state.activeVibe) return;
+  if (!(vibeId in VIBE_PRESETS)) return;
   state.activeVibe = vibeId;
   state.activePresetId = null;
   state.activeLutId = null;
@@ -1629,7 +1630,7 @@ async function handleFiles(files) {
   valid.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   state._queue = valid;
   state._current = 0;
-  state._perImage = valid.map(() => ({ vibeId: state.activeVibe }));
+  state._perImage = valid.map(() => ({ vibeId: state.activeVibe, ...snapshotPhotoLook() }));
   _pixelCache.clear();
   _previewCache.clear();
   updateBatchButton();
@@ -1864,7 +1865,28 @@ function saveCurrentImageState() {
     crop:     { ...state.crop },
     vibeId:   state.activeVibe,
     autoWb:   state.autoWb,
+    ...snapshotPhotoLook(),
   };
+}
+
+// Preserve the actual effect settings and custom LUT/preset, not just a vibe ID.
+function snapshotPhotoLook() {
+  return { config: { ...state.config }, saturation: state.saturation,
+    activePresetId: state.activePresetId, activeLutId: state.activeLutId };
+}
+async function restorePhotoLook(saved) {
+  const vibeId = saved?.vibeId ?? state.activeVibe;
+  if (!saved?.config) { await _applyVibeConfig(vibeId); return; }
+  const changed = state.config?.lut_path !== saved.config.lut_path;
+  state.activeVibe = vibeId;
+  state.config = { ...saved.config };
+  state.saturation = saved.saturation ?? 1;
+  state.activePresetId = saved.activePresetId ?? null;
+  state.activeLutId = saved.activeLutId ?? null;
+  state._processor?.setConfig(state.config);
+  if (state._processor) state._processor.saturation = state.saturation;
+  syncEffectToggles(); syncEffectSliders(); syncLookPillsUI();
+  if (changed && state.processorReady) await ensureLutByPath(state.config.lut_path);
 }
 
 const _syncCoreSliders = () => {
@@ -1907,8 +1929,7 @@ async function selectPhoto(i) {
   _syncCoreSliders();
 
   // Restore this photo's vibe BEFORE checking the cache so the key is correct.
-  const targetVibeId = saved?.vibeId ?? state.activeVibe;
-  await _applyVibeConfig(targetVibeId);
+  await restorePhotoLook(saved);
   syncUserSettingsToProcessor();
   resetHistory();   // each photo has its own fresh undo history
 
@@ -2049,7 +2070,7 @@ function _previewKey() {
   // Crop is part of the key: the vignette is rendered against it, so a cached
   // preview from a different crop would carry the wrong falloff.
   const c = state.crop ?? {};
-  return `${state.activeVibe}|${(a.exposure_ev ?? 0).toFixed(3)}|${(a.wb_temp ?? 0).toFixed(0)}|${(a.tint ?? 0).toFixed(0)}|${(a.push_pull_ev ?? 0).toFixed(3)}` +
+  return `${JSON.stringify(state.config)}|${state.saturation}|${state.activeVibe}|${(a.exposure_ev ?? 0).toFixed(3)}|${(a.wb_temp ?? 0).toFixed(0)}|${(a.tint ?? 0).toFixed(0)}|${(a.push_pull_ev ?? 0).toFixed(3)}` +
          `|${c.angle ?? 0}|${(c.x ?? 0).toFixed(4)}|${(c.y ?? 0).toFixed(4)}|${(c.w ?? 1).toFixed(4)}|${(c.h ?? 1).toFixed(4)}`;
 }
 function _previewCachePut(i, imageData) {
@@ -2110,7 +2131,9 @@ function cacheGet(i) {
 // Shown once per session when the first foreign (non-One35) RAW is opened.
 let _foreignNoticeShown = false;
 
+let _imageLoads = 0;
 async function openImage(source, name, opts = {}) {
+  _imageLoads++;
   if (!opts.quiet) showLoading(`Reading ${name}…`);
   try {
     const buffer = source instanceof ArrayBuffer ? source : await source.arrayBuffer();
@@ -2177,7 +2200,7 @@ async function openImage(source, name, opts = {}) {
       console.error('[app] File load error:', err);
       showToast(`Failed to decode — ${err.message ?? 'invalid RAW?'}`, 5000, true);
     }
-  }
+  } finally { _imageLoads--; }
 }
 
 // ─── Resume last photo ────────────────────────────────────────────────────────
@@ -2387,8 +2410,8 @@ async function saveFiles(files) {
   if (r === 'cancelled') return false;
   // 'blocked' — activation expired; one explicit tap re-arms it.
   const ok = await showDialog({
-    title: files.length > 1 ? `Save ${files.length} photos` : 'Save photo',
-    message: files.length > 1
+    title: files[0]?.type === 'application/zip' ? 'Save ZIP' : files.length > 1 ? `Save ${files.length} photos` : 'Save photo',
+    message: files[0]?.type === 'application/zip' ? 'Your processed photos are ready in one ZIP. Choose Save to Files.' : files.length > 1
       ? 'All photos are developed and ready.'
       : 'Your photo is developed and ready.',
     confirmLabel: 'Save',
@@ -2480,17 +2503,16 @@ addLongPress(exportBtn,      () => showFormatPicker('single'), () => doExport(st
 addLongPress(batchExportBtn, () => showFormatPicker('batch'),  () => runBatch());
 
 // ─── Batch Export ───────────────────────────────────────────────────────────
-// Develops every file in the current selection through the active vibe/settings
-// and downloads each as a full-resolution JPEG. Each file reuses the exact
-// single-file path (load → full-res render), so batch output matches what you'd
-// get exporting each one by hand. Per-file errors are skipped, not fatal.
+// Develops included photos with their saved looks, adjustments and geometry,
+// then downloads a single ZIP. Uses the same rendering path as single export.
 
 /** Show/hide the multi-photo controls (batch export, select) per queue size. */
 function updateBatchButton() {
   const n = state._queue?.length ?? 0;
   if (batchExportBtn) {
     const excl = state._excluded?.size ?? 0;
-    batchExportBtn.textContent = excl > 0 ? `Batch ${n - excl}/${n}` : `Batch ×${n}`;
+    batchExportBtn.textContent = `Download ZIP (${n - excl})`;
+    batchExportBtn.disabled = n === excl;
     batchExportBtn.classList.toggle('hidden', n < 2);
   }
   // Select (multi-photo) only makes sense with 2+ photos; leaving select mode
@@ -2535,7 +2557,7 @@ function updateLookToolsUI() {
     : (state._current !== state._copySource);
   show('copy-look-btn', !sel && multi);         // Copy hidden while selecting / single photo
   show('paste-look-btn', armed && hasApplyTarget && multi);
-  show('paste-all-btn', armed && !sel && multi); // quick apply-to-all when armed (no Select needed)
+  show('paste-all-btn', !sel && multi); // directly applies the current look when no copy is armed
   show('select-btn', multi);
   show('select-all-btn', sel);
   show('exclude-sel-btn', sel);
@@ -2670,14 +2692,14 @@ function markCopySource() {
   }
 }
 
-function armCopy() {
-  if (!state.hasImage) return;
+function armCopy(quiet = false) {
+  if (!state.hasImage || _exporting) return;
   saveCurrentImageState();
-  state._lookClipboard = { vibeId: state.activeVibe, adjust: { ...state.adjust } };
+  state._lookClipboard = { vibeId: state.activeVibe, adjust: { ...state.adjust }, ...snapshotPhotoLook() };
   state._copySource = state._current;
   markCopySource();
   updateLookToolsUI();
-  showToast('Look copied — pick photos and apply');
+  if (!quiet) showToast('Look copied — pick photos and apply');
 }
 function disarmCopy() {
   state._lookClipboard = null;
@@ -2691,18 +2713,21 @@ function pasteLookTo(i) {
   const look = state._lookClipboard;
   if (!look) return;
   state._perImage[i] = {
-    adjust:   { ...look.adjust },
+    ...state._perImage[i],
+    ...look,
+    adjust: { ...look.adjust }, config: { ...look.config },
     rotation: state._perImage[i]?.rotation ?? 0,
-    crop:     state._perImage[i]?.crop ?? { angle: 0, x: 0, y: 0, w: 1, h: 1 },
-    vibeId:   look.vibeId,
+    crop: state._perImage[i]?.crop ?? defaultCropRect(),
+    autoWb: state._perImage[i]?.autoWb ?? defaultAutoWb(),
   };
+  _previewCache.delete(i);
   updateThumbBadge(i);
 }
 
 /** Apply the clipboard look to a set of indices, refreshing the live view too. */
 async function applyLookToIndices(indices) {
   const look = state._lookClipboard;
-  if (!look) return;
+  if (!look || _exporting) return;
   const targets = indices.filter((i) => i !== state._copySource);   // never the source
   if (!targets.length) { showToast('Pick a different photo to apply to'); return; }
   saveCurrentImageState();
@@ -2710,13 +2735,14 @@ async function applyLookToIndices(indices) {
   if (targets.includes(state._current)) {
     state.adjust = { ...look.adjust };
     _syncCoreSliders();
-    await _applyVibeConfig(look.vibeId);
+    await restorePhotoLook(look);
     syncUserSettingsToProcessor();
     if (state.hasImage) triggerRender(false);
   }
   showToast(targets.length === 1 ? 'Look applied' : `Look applied to ${targets.length} photos`);
   if (state._selectMode) exitSelectMode();
   disarmCopy();   // one paste per copy — resets the armed state
+  schedulePersist();
 }
 
 $('copy-look-btn')?.addEventListener('click', () => {
@@ -2730,7 +2756,8 @@ $('paste-look-btn')?.addEventListener('click', () => {
   applyLookToIndices(targets);
 });
 $('paste-all-btn')?.addEventListener('click', () => {
-  if (!state._lookClipboard) return;
+  if (_exporting || !state.hasImage) return;
+  if (!state._lookClipboard) armCopy(true);
   const n = state._queue?.length ?? 0;
   applyLookToIndices([...Array(n).keys()]);   // applyLookToIndices excludes the source
 });
@@ -2818,18 +2845,27 @@ async function runBatch(overrideFormat) {
 
   _exporting = true; _cancelBatch = false;
   _thumbToken++;   // stop the background decode queue — batch owns the decoder now
+  _navToken++; _renderGen++;
+  clearTimeout(_idleTimer);
   resetZoom();   // a stale pinch-zoom shouldn't carry over onto batch images
   saveCurrentImageState();   // capture the on-screen photo's latest tweaks
-  showProgress('Developing batch…');
+  showProgress('Developing photos for ZIP…');
+  for (const id of ['controls', 'top-bar', 'look-tools-row']) $(id).inert = true;
   const batchTotal = files.length - (state._excluded?.size ?? 0);
-  let failed = 0, lastDone = state._current, batchDone = 0;
-  let _batchVibe = null;   // track LUT state to avoid redundant switches
+  let failed = 0, batchDone = 0;
+  const originalIndex = state._current;
   const outFiles = [];   // everything is delivered at once at the end
   try {
+    // Finish any active preview load before batch takes ownership of the GPU.
+    while (_renderInFlight || _idleRendering || _renderQueued || _imageLoads) {
+      if (_cancelBatch) { showToast('ZIP export cancelled'); return; }
+      await new Promise(r => setTimeout(r, 20));
+    }
     for (let i = 0; i < files.length; i++) {
       if (_cancelBatch) break;
       if (state._excluded?.has(i)) continue;
       const f = files[i];
+      state._current = i; // frame stamps and metadata belong to this export
       setProgress(batchDone, batchTotal, `Developing ${batchDone + 1} / ${batchTotal}: ${f.name}`);
       try {
         const buf = await f.arrayBuffer();
@@ -2844,24 +2880,13 @@ async function runBatch(overrideFormat) {
         await state._processor.loadDecoded(decoded, f.name, buf);
         setFilename(f.name);
         state.hasImage = true;
-        const photoVibeId = per?.vibeId ?? state.activeVibe;
-        if (photoVibeId !== _batchVibe) {
-          const factory = factoryStateFor(photoVibeId);
-          const savedVibeConfig = hasSaved(photoVibeId) ? loadOne(photoVibeId) : null;
-          state.config = savedVibeConfig
-            ? { ...factory, ...savedVibeConfig, lut_path: factory.lut_path, base_push_ev: factory.base_push_ev, b_push_boost: factory.b_push_boost }
-            : { ...factory };
-          state.activeVibe = photoVibeId;
-          state._processor.setConfig(state.config);
-          await ensureLutForVibe(photoVibeId);
-          _batchVibe = photoVibeId;
-        }
-        state._processor.setSettings(per?.adjust ?? defaultAdjust());
+        await restorePhotoLook(per);
+        state.adjust = { ...(per?.adjust ?? defaultAdjust()) };
+        syncUserSettingsToProcessor();
         _stampDateOverrideMs = f?.lastModified ?? null;   // this file's date for its stamp
         state.crop = per?.crop ? { ...per.crop } : defaultCropRect();
         const turns = (((per?.rotation ?? 0) % 4) + 4) % 4;
         for (let t = 0; t < turns; t++) state._processor.rotateClockwise();
-        lastDone = i;
         const batchFmt = overrideFormat ?? state.settings.batchExportFormat;
         if (batchFmt === 'tiff') {
           let out = await renderForExport({ raw: true });
@@ -2880,47 +2905,45 @@ async function runBatch(overrideFormat) {
         console.error('[app] batch item failed:', f?.name, err);
       }
     }
-    _stampDateOverrideMs = null;   // back to the on-screen photo's own file date
-    // Leave the canvas (and the strip/sliders) on the last image we processed.
-    state._current = lastDone;
-    markActiveThumb();
-    state.adjust = state._perImage[lastDone]?.adjust ?? defaultAdjust();
-    state.autoWb = state._perImage[lastDone]?.autoWb ?? defaultAutoWb();
-    if (state._processor) state._processor.cameraWb = state.autoWb;
-    syncAutoWbUI();
-    _syncCoreSliders();
-    const lastVibeId = state._perImage[lastDone]?.vibeId ?? state.activeVibe;
-    if (lastVibeId !== state.activeVibe) selectVibe(lastVibeId);
-    else syncUserSettingsToProcessor();
-    try {
-      const last = await state._processor.renderPreview({ downscale: false });
-      if (last) await drawToCanvas(last);
-    } catch { /* ignore */ }
-  } finally {
+    if (_cancelBatch) { showToast('ZIP export cancelled'); return; }
+    if (!outFiles.length) throw new Error('No photos could be developed');
+    progressTitle.textContent = 'Building ZIP…';
+    const zip = await createZipFile(outFiles, {
+      name: 'flashback-photos.zip', cancelled: () => _cancelBatch,
+      onProgress: (done, total, name) => setProgress(done, total, name ? 'Packing ' + (done + 1) + ' / ' + total + ': ' + name : 'ZIP ready'),
+    });
     hideProgress();
-  }
-
-  // One save interaction for the whole batch: a single share sheet carrying
-  // every developed photo (Save to Files / Save N Images), instead of the old
-  // one-download-per-file drip.
-  let saved = false;
-  try {
-    if (outFiles.length) saved = await saveFiles(outFiles);
+    const saved = await saveFiles([zip]);
+    showToast(!saved ? 'ZIP save cancelled' : failed
+      ? 'ZIP saved: ' + outFiles.length + ' photos, ' + failed + ' skipped'
+      : 'ZIP saved: ' + outFiles.length + ' processed photos', 4000, failed > 0);
+  } catch (err) {
+    console.error('[app] ZIP export failed:', err);
+    showToast(err.name === 'AbortError' ? 'ZIP export cancelled' : 'ZIP export failed — ' + err.message, 5000, err.name !== 'AbortError');
   } finally {
+    _stampDateOverrideMs = null;
+    hideProgress();
+    // Restore the photo the user was editing, including its preview and metadata.
+    state._current = originalIndex;
+    setFilename(files[originalIndex].name);
+    const per = state._perImage[originalIndex];
+    state.adjust = { ...(per?.adjust ?? defaultAdjust()) };
+    state.crop = per?.crop ? { ...per.crop } : defaultCropRect();
+    state.autoWb = per?.autoWb ?? defaultAutoWb();
+    try {
+      await restorePhotoLook(per);
+      syncUserSettingsToProcessor(); syncAutoWbUI(); _syncCoreSliders();
+      await openImage(files[originalIndex], files[originalIndex].name, { fromStrip: true, queueIndex: originalIndex, quiet: true });
+      const turns = (((per?.rotation ?? 0) % 4) + 4) % 4;
+      for (let t = 0; t < turns; t++) state._processor.rotateClockwise();
+      state._processor.cropRect = isCropDefault(state.crop) ? null : { ...state.crop };
+      const preview = await state._processor.renderPreview({ downscale: false });
+      if (preview) await drawToCanvas(preview);
+      markActiveThumb();
+    } catch (err) { console.warn('[app] Could not restore preview:', err); }
     _exporting = false;
+    for (const id of ['controls', 'top-bar', 'look-tools-row']) $(id).inert = false;
   }
-  const cancelled = _cancelBatch;
-  const fmt = (overrideFormat ?? state.settings.batchExportFormat) === 'tiff' ? 'TIFF' : 'JPEG';
-  const n = outFiles.length;
-  showToast(
-    !n               ? 'Batch produced no files'
-    : !saved         ? 'Batch save cancelled'
-    : cancelled      ? `Batch stopped · ${n} ${fmt}${n === 1 ? '' : 's'} saved`
-    : failed         ? `Batch: ${n} saved, ${failed} skipped`
-    :                  `Batch: ${n} ${fmt}${n === 1 ? '' : 's'} saved`,
-    4000,
-    (failed > 0 || !n) && !cancelled,
-  );
 }
 
 resetBtn?.addEventListener('click', resetCurrentVibe);
@@ -2961,11 +2984,12 @@ export function showToast(msg, duration = 2500, isError = false) {
 
 let _renderQueued  = false;
 let _renderInFlight = false;
+let _idleRendering = false;
 let _idleTimer     = null;
 let _renderGen     = 0;   // bumped on photo switch; stale renders/cache-writes are dropped
 
 function triggerRender(interactive = true) {
-  if (!state._processor || !state.processorReady || !state.hasImage) return;
+  if (_exporting || !state._processor || !state.processorReady || !state.hasImage) return;
 
   // Vignette follows the committed crop — keep the processor's copy current
   // (triggerRender is the single gateway for every preview render).
@@ -2977,6 +3001,7 @@ function triggerRender(interactive = true) {
     _renderQueued = true;
     requestAnimationFrame(async () => {
       _renderQueued = false;
+      if (_exporting || gen !== _renderGen) return;
       _renderInFlight = true;
       try {
         const img = await state._processor.renderPreview({ downscale: interactive });
@@ -2992,7 +3017,8 @@ function triggerRender(interactive = true) {
   // Crisp, full-resolution pass after the user stops adjusting.
   clearTimeout(_idleTimer);
   _idleTimer = setTimeout(async () => {
-    if (!state.hasImage) return;
+    if (_exporting || !state.hasImage) return;
+    _idleRendering = true;
     const idleGen = _renderGen;
     // Self-heal: if rAF never fired (tab backgrounded/throttled), the queued
     // flag would otherwise stay stuck and block all future interactive renders.
@@ -3007,7 +3033,7 @@ function triggerRender(interactive = true) {
       }
     } catch (err) {
       console.error('[app] full-res render error:', err);
-    }
+    } finally { _idleRendering = false; }
   }, 220);
 }
 

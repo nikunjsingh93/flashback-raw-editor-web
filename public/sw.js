@@ -12,7 +12,7 @@
 // whenever the precache list or strategy changes.
 const APP_ROOT = new URL('./', self.registration.scope);
 const CACHE_PREFIX = 'flashback-pages-' + encodeURIComponent(APP_ROOT.pathname) + '-';
-const CACHE_NAME = CACHE_PREFIX + 'v45';
+const CACHE_NAME = CACHE_PREFIX + 'v46';
 
 // Files to pre-cache on install (app shell).
 const PRECACHE = [

@@ -186,7 +186,7 @@
     <div id="look-tools">
       <button id="copy-look-btn" class="look-tool-btn" type="button" aria-label="Copy this look" title="Copy this look (profile + adjustments)">Copy</button>
       <button id="paste-look-btn" class="look-tool-btn hidden" type="button" aria-label="Apply look" title="Apply the copied look">Apply</button>
-      <button id="paste-all-btn" class="look-tool-btn hidden" type="button" aria-label="Apply look to all photos" title="Apply the copied look to every photo">Apply all</button>
+      <button id="paste-all-btn" class="look-tool-btn hidden" type="button" aria-label="Apply look to all photos" title="Apply the current or copied film look and adjustments to every photo">Apply look to all</button>
       <button id="select-all-btn" class="look-tool-btn hidden" type="button" aria-label="Select all photos" title="Select all photos">Select All</button>
       <button id="exclude-sel-btn" class="look-tool-btn hidden" type="button" aria-label="Exclude selected from export" title="Exclude/include selected from batch export">Exclude</button>
       <button id="remove-sel-btn" class="look-tool-btn hidden" type="button" aria-label="Remove selected from queue" title="Remove selected photos">Remove</button>
@@ -389,7 +389,7 @@
       </button>
 
       <div class="export-group">
-        <button id="batch-export-btn" class="btn-export hidden" aria-label="Develop and export all selected files">Batch Export</button>
+        <button id="batch-export-btn" class="btn-export hidden" aria-label="Download included processed photos as ZIP">Download ZIP</button>
         <button id="export-btn" class="btn-export" aria-label="Export current photo">Export</button>
       </div>
     </div><!-- /#action-bar -->
@@ -622,8 +622,8 @@
           <ul>
             <li><b>Copy</b> — copies the current photo's look (profile + exposure/WB/tint).
             The source photo and the Copy button outline in blue while it's “armed.”</li>
-            <li><b>Apply</b> — applies it to the photo you're viewing; <b>Apply all</b>
-            applies it to every other photo. A look can't be applied to itself, and the
+            <li><b>Apply</b> — applies it to the photo you're viewing; <b>Apply look to all</b>
+            applies it to every other photo. You can also tap <b>Apply look to all</b> directly to use the current film look and adjustments across the roll. A look can't be applied to itself, and the
             copy resets after one apply.</li>
             <li><b>Select</b> — pick several photos (tap to toggle, a ✓ shows top-right),
             then <b>Apply</b> to just those, <b>Exclude/Include</b> them from batch export,
@@ -645,9 +645,9 @@
             sensor's native size. On iPhone it renders in tiles to stay within memory, so
             it's a bit slower but produces the same full-res result. Saving on iPhone opens
             the share sheet — pick <b>Save Image</b> or <b>Save to Files</b>; on desktop/Android it downloads.</li>
-            <li>With 2+ photos loaded, a <b>Batch Export</b> button appears. It develops
+            <li>With 2+ photos loaded, a <b>Download ZIP</b> button appears. It develops
             every <i>included</i> photo — each with its own profile and adjustments —
-            and saves them together in one share sheet. Long-press it to pick the batch
+            and packs the processed JPEGs or TIFFs into one ZIP. On iPhone, choose <b>Save to Files</b>. Long-press it to pick the batch
             format separately from the single-export format.</li>
           </ul>
         </section>
