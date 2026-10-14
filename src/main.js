@@ -117,6 +117,38 @@ const progressCancel  = $('progress-cancel');
 
 const vibePills = document.querySelectorAll('.vibe-pill[data-vibe]');
 
+// Install prompt is optional: Settings also explains the browser's manual flow.
+let installPrompt = null;
+let installedThisSession = false;
+const standaloneMode = window.matchMedia('(display-mode: standalone)');
+function syncInstallButton() {
+  const installed = installedThisSession || standaloneMode.matches || navigator.standalone === true;
+  $('settings-install-btn').disabled = installed;
+  $('settings-install-btn').textContent = installed ? 'App installed' : 'Install Flashback';
+}
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault(); installPrompt = event; syncInstallButton();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null; installedThisSession = true; syncInstallButton();
+});
+standaloneMode.addEventListener('change', syncInstallButton);
+$('settings-install-btn').addEventListener('click', async () => {
+  if (installPrompt) {
+    const event = installPrompt; installPrompt = null;
+    try { await event.prompt(); await event.userChoice; }
+    catch { showToast('Use your browser menu to install Flashback.', 4000); }
+    syncInstallButton(); return;
+  }
+  $('settings-overlay').classList.remove('open');
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  showDialog({ title: 'Install Flashback',
+    message: ios ? 'Open this page in Safari, tap Share, then Add to Home Screen and Add.'
+      : 'Open your browser menu and choose Install app, Install Flashback, or Add to Home screen. In Edge, look under Apps. If your browser has no install option, open this page in Chrome or Edge.',
+    confirmLabel: 'Got it' });
+});
+syncInstallButton();
+
 // ─── Service Worker Registration ─────────────────────────────────────────────
 
 if ('serviceWorker' in navigator) {

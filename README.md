@@ -2,6 +2,8 @@
 
 [Open Flashback RAW Editor](https://nikunjsingh93.github.io/flashback-raw-editor-web/)
 
+Install from **Settings → Install app**. Chrome/Edge can show a native install prompt; other browsers show instructions. The offline worker caches the editor, RAW decoder and bundled film assets while online. Installed apps support both portrait and landscape.
+
 The app opens straight into the editor and automatically restores the last photo, imported filmstrip and per-photo edits stored on this device. Import is in the editor toolbar and the empty preview area.
 
 On screens at least 1024 px wide, the editor places film looks, sliders and effects in a scrolling left sidebar, with the photo preview and filmstrip on the right. Smaller screens use the touch layout.
@@ -15,7 +17,7 @@ Changes adapt asset URLs, the install manifest and offline worker to a GitHub Pa
 
 Pushes to main build and publish dist through GitHub Actions. For a matching local build: set VITE_BASE_PATH=/flashback-raw-editor-web/ and run npm run build.
 
-Android requires a browser/device with WebGPU. Load the app and use each film look while online before relying on offline operation.
+Android requires a browser/device with WebGPU. Open the app online once and allow its offline assets to finish caching before relying on offline operation.
 
 ---
 

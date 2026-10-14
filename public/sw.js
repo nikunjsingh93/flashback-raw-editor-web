@@ -12,7 +12,9 @@
 // whenever the precache list or strategy changes.
 const APP_ROOT = new URL('./', self.registration.scope);
 const CACHE_PREFIX = 'flashback-pages-' + encodeURIComponent(APP_ROOT.pathname) + '-';
-const CACHE_NAME = CACHE_PREFIX + 'v48';
+const CACHE_NAME = CACHE_PREFIX + 'v49';
+
+const OFFLINE_ASSETS = /* BUILD_OFFLINE_ASSETS */ [];
 
 // Files to pre-cache on install (app shell).
 const PRECACHE = [
@@ -23,7 +25,7 @@ const PRECACHE = [
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-].map((file) => new URL(file, APP_ROOT).href);
+].concat(OFFLINE_ASSETS).filter((file, index, files) => files.indexOf(file) === index).map((file) => new URL(file, APP_ROOT).href);
 
 // ─── Install: pre-cache app shell ───────────────────────────────────────────
 // NOTE: we deliberately do NOT call skipWaiting() here. A freshly installed

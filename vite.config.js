@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { resolve, relative, join } from 'node:path';
 
 // Build stamp shown on the front page so you can confirm a deploy actually
 // reached your device. The timestamp changes on every build, so if the version
@@ -13,6 +14,25 @@ export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(BUILD_ID),
   },
+
+  plugins: [{
+    name: 'offline-editor-assets',
+    apply: 'build',
+    closeBundle() {
+      const folder = resolve('dist');
+      const files = [];
+      function walk(directory) {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          const file = join(directory, entry.name);
+          if (entry.isDirectory()) walk(file);
+          else if (/\.(js|css|wasm|wgsl|cube|png)$/.test(entry.name)) files.push('./' + relative(folder, file).replaceAll('\\', '/'));
+        }
+      }
+      walk(folder);
+      const worker = join(folder, 'sw.js');
+      writeFileSync(worker, readFileSync(worker, 'utf8').replace('/* BUILD_OFFLINE_ASSETS */ []', JSON.stringify(files.sort())));
+    },
+  }],
 
   // Serve assets from project root
   publicDir: 'public',

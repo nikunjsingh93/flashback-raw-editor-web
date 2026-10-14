@@ -4,7 +4,7 @@
   "description": "Flashback One35 v2 RAW image editor with film emulation",
   "start_url": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",
   "icons": [
