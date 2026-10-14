@@ -2105,3 +2105,12 @@ body.zen #controls {
   body.zen .desktop-layout #controls { display: none; }
   body.zen .desktop-layout > #photo-strip { grid-column: 1; grid-row: 2; }
 }
+
+/* Import is part of the editing workspace, including on first launch. */
+#empty-state { position: absolute; padding: 24px; gap: 12px; }
+#empty-state .empty-icon { width: 52px; height: 52px; margin-bottom: 4px; }
+#empty-state h1 { font-size: 20px; }
+#empty-state .version-row, #empty-state #whatsnew-btn-empty { display: none; }
+.import-button { width: auto; gap: 8px; padding: 0 12px; }
+.import-label { font-size: 12px; font-weight: 600; }
+@media (max-width: 599px) { .import-label { display: none; } .import-button { width: 40px; padding: 0; } }

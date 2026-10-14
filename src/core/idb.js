@@ -171,3 +171,46 @@ export async function clearLastPhoto() {
     db.close();
   } catch { /* ignore */ }
 }
+
+// Save imported files once; adjustment changes only rewrite the small edit record.
+export async function saveWorkspace(files, edits) {
+  let db;
+  try {
+    db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(files, 'workspace-files');
+      tx.objectStore(STORE).put(edits, 'workspace-edits');
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+    });
+    return true;
+  } catch (err) { console.warn('[idb] Could not save workspace:', err); return false; }
+  finally { db?.close(); }
+}
+export async function saveWorkspaceEdits(edits) {
+  let db;
+  try {
+    db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(edits, 'workspace-edits');
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+    });
+  } catch (err) { console.warn('[idb] Could not save edits:', err); }
+  finally { db?.close(); }
+}
+export async function loadWorkspace() {
+  let db;
+  try {
+    db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const files = tx.objectStore(STORE).get('workspace-files');
+      const edits = tx.objectStore(STORE).get('workspace-edits');
+      tx.oncomplete = () => resolve(files.result ? { ...files.result,
+        edits: edits.result?.id === files.result.id ? edits.result : null } : null);
+      tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+    });
+  } catch (err) { console.warn('[idb] Could not load workspace:', err); return null; }
+  finally { db?.close(); }
+}

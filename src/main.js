@@ -18,7 +18,8 @@ import {
   listPresets, savePreset, deletePreset,
 } from './core/vibe-state.js';
 import {
-  saveLastPhoto, loadLastPhoto, clearLastPhoto, hasLastPhoto,
+  loadLastPhoto, clearLastPhoto,
+  saveWorkspace, saveWorkspaceEdits, loadWorkspace,
   saveCustomLut, listCustomLuts, getCustomLut, deleteCustomLut,
 } from './core/idb.js';
 import { RawDecoder } from './core/raw-decoder.js';
@@ -106,7 +107,6 @@ const lutNameBadge    = $('lut-name-badge');
 const infoBtn         = $('info-btn');
 const infoBtnEmpty    = $('info-btn-empty');
 const helpSheet       = $('help-sheet');
-const resumeBtn       = $('resume-btn');
 const vibeStrip       = $('vibe-strip');
 const savePresetBtn   = $('save-preset-btn');
 const progressOverlay = $('progress-overlay');
@@ -202,7 +202,7 @@ function showUpdateBanner(reg) {
 
 // ─── WebGPU Init ──────────────────────────────────────────────────────────────
 
-(async () => {
+const processorInit = (async () => {
   const device = await initGPU();
   if (!device) {
     const reason = getInitError() || 'WebGPU is unavailable on this browser/device.';
@@ -305,6 +305,7 @@ function persistState() {
   } else {
     saveOne(state.activeVibe, state.config);
   }
+  persistWorkspaceEdits();
   saveSession({
     v:              2,   // session schema (v2 = Natural-default era)
     activeVibe:     state.activeVibe,
@@ -1481,6 +1482,7 @@ rotateBtn?.addEventListener('click', () => {
   state._processor.rotateClockwise();
   resetZoom();
   triggerRender(false);
+  schedulePersist();
 });
 
 $('rotate-left-btn')?.addEventListener('click', () => {
@@ -1488,6 +1490,7 @@ $('rotate-left-btn')?.addEventListener('click', () => {
   state._processor.rotateCounterClockwise();
   resetZoom();
   triggerRender(false);
+  schedulePersist();
 });
 
 // Date stamp toggle + frame-number toggle (burn into preview + JPEG exports).
@@ -1628,6 +1631,10 @@ async function handleFiles(files) {
   // Remember the whole selection: the first file opens in the editor, the rest
   // are reachable from the photo strip and included in batch export.
   valid.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  clearTimeout(_persistTimer);
+  _workspaceEpoch++;
+  state.hasImage = false;
+  state._workspaceId = crypto.randomUUID();
   state._queue = valid;
   state._current = 0;
   state._perImage = valid.map(() => ({ vibeId: state.activeVibe, ...snapshotPhotoLook() }));
@@ -1648,6 +1655,7 @@ async function handleFiles(files) {
 
   await openImage(valid[0], valid[0].name, { queueIndex: 0 });
   resetHistory();     // fresh undo history for the just-opened photo
+  persistWorkspaceFiles();
   generateThumbs();   // background — decodes the rest once, thumbs + cache
 }
 
@@ -1841,8 +1849,24 @@ async function removeFromQueue(idx) {
   showToast(`Removed ${removed}`);
   if (state._queue.length > 0 && wasCurrent) {
     const f = state._queue[state._current];
-    if (f) await openImage(f, f.name, { fromStrip: true, queueIndex: state._current });
+    if (f) {
+      const per = state._perImage[state._current];
+      state.adjust = { ...(per?.adjust ?? defaultAdjust()) };
+      state.crop = per?.crop ? { ...per.crop } : defaultCropRect();
+      state.autoWb = per?.autoWb ?? defaultAutoWb();
+      state._processor.cameraWb = state.autoWb;
+      await restorePhotoLook(per); syncUserSettingsToProcessor(); syncAutoWbUI(); _syncCoreSliders();
+      await openImage(f, f.name, { fromStrip: true, queueIndex: state._current });
+      const turns = (((per?.rotation ?? 0) % 4) + 4) % 4;
+      for (let t = 0; t < turns; t++) state._processor.rotateClockwise();
+      if (turns) triggerRender(false);
+    }
+  } else if (!state._queue.length) {
+    state.hasImage = false; exportBtn.disabled = true;
+    emptyState.classList.remove('hidden'); $('file-info').classList.add('hidden');
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
+  persistWorkspaceFiles();
 }
 
 /** Toggle a photo's excluded-from-batch state by index. */
@@ -1856,6 +1880,7 @@ function toggleExcluded(idx) {
   const thumbs = photoStrip?.querySelectorAll('.strip-thumb');
   if (thumbs?.[idx]) thumbs[idx].classList.toggle('excluded', state._excluded.has(idx));
   updateBatchButton();
+  persistWorkspaceEdits();
 }
 
 
@@ -2194,10 +2219,7 @@ async function openImage(source, name, opts = {}) {
         await drawToCanvas(result);
         state.hasImage = true;
         resetZoom();
-        // Enable Resume next launch. Skipped for strip switches — re-writing a
-        // 10–20 MB blob to IndexedDB on every thumbnail tap would make switching
-        // sluggish; Resume keeps pointing at the first-opened photo instead.
-        if (!opts.fromResume && !opts.fromStrip) rememberLastPhoto(buffer, name);
+
       } else if (!result && !isStale) {
         drawPlaceholder(name);
         showToast('Could not decode image', 4000, true);
@@ -2210,7 +2232,10 @@ async function openImage(source, name, opts = {}) {
       console.error('[app] File load error:', err);
       showToast(`Failed to decode — ${err.message ?? 'invalid RAW?'}`, 5000, true);
     }
-  } finally { _imageLoads--; }
+  } finally {
+    _imageLoads--;
+    if (!opts.fromResume && state.hasImage && !_exporting) schedulePersist();
+  }
 }
 
 // ─── Resume last photo ────────────────────────────────────────────────────────
@@ -2219,60 +2244,75 @@ async function openImage(source, name, opts = {}) {
 
 const LAST_META_KEY = 'flashback:last-photo-meta';
 
-async function rememberLastPhoto(buffer, name) {
-  try {
-    await saveLastPhoto({ name, bytes: buffer });
-    localStorage.setItem(LAST_META_KEY, JSON.stringify({ name }));
-  } catch { /* non-fatal */ }
+let _workspaceWrite = Promise.resolve();
+let _workspaceEpoch = 0;
+function workspaceEdits() {
+  saveCurrentImageState();
+  return { id: state._workspaceId, current: state._current,
+    perImage: structuredClone(state._perImage), excluded: [...state._excluded] };
+}
+function persistWorkspaceEdits() {
+  if (!state._workspaceId || !state.hasImage || _exporting || _imageLoads) return;
+  const edits = workspaceEdits();
+  _workspaceWrite = _workspaceWrite.then(() => saveWorkspaceEdits(edits));
+}
+function persistWorkspaceFiles() {
+  if (!state._workspaceId) return;
+  const files = { id: state._workspaceId, photos: state._queue.map(f => ({ name: f.name, lastModified: f.lastModified, blob: f })) };
+  const edits = workspaceEdits();
+  _workspaceWrite = _workspaceWrite.then(async () => {
+    if (!(await saveWorkspace(files, edits))) showToast('Could not remember these photos. You can still edit and export them.', 5000, true);
+    else { await clearLastPhoto(); try { localStorage.removeItem(LAST_META_KEY); } catch { /* storage restricted */ } }
+  });
 }
 
-async function showResumeIfAvailable() {
-  if (!resumeBtn) return;
+async function startInEditor() {
+  // The editor is visible immediately; startup never routes through a Resume page.
+  openBtn.disabled = true; heroOpenBtn.disabled = true;
+  const epoch = _workspaceEpoch;
   try {
-    const raw = localStorage.getItem(LAST_META_KEY);
-    const meta = raw ? JSON.parse(raw) : null;
-    if (!meta?.name) return;
-    // The flag can outlive the actual blob (iOS evicts IndexedDB but keeps
-    // localStorage), which left a stale "Resume" button that failed on tap.
-    // Verify the blob is really there; if not, clear the flag and stay hidden.
-    if (!(await hasLastPhoto())) {
-      localStorage.removeItem(LAST_META_KEY);
-      resumeBtn.classList.add('hidden');
-      return;
-    }
-    const label = $('resume-label');
-    if (label) label.textContent = `Resume ${meta.name}`;
-    resumeBtn.classList.remove('hidden');
-  } catch { /* ignore */ }
-}
-
-resumeBtn?.addEventListener('click', async () => {
-  if (!state.processorReady) { showToast('WebGPU unavailable', 3000, true); return; }
-  showLoading('Loading last photo…');
-  try {
-    const rec = await loadLastPhoto();
-    if (!rec?.bytes) {
-      hideLoading();
-      localStorage.removeItem(LAST_META_KEY);
-      clearLastPhoto();   // drop any orphaned record so the blob isn't stranded
-      resumeBtn.classList.add('hidden');
-      showToast('No saved photo found', 3000, true);
-      return;
-    }
-    state._queue = []; state._perImage = []; state._current = 0;
-    state.autoWb = defaultAutoWb();
+    await processorInit;
+    await restoredLutPills;
+    if (!state.processorReady || epoch !== _workspaceEpoch) return;
+    const workspace = await loadWorkspace();
+    const legacy = workspace ? null : await loadLastPhoto();
+    if (epoch !== _workspaceEpoch) return;
+    if (!workspace?.photos?.length && !legacy?.bytes) return;
+    showLoading('Restoring editor…');
+    const photos = workspace?.photos?.length ? workspace.photos : [{ name: legacy.name, blob: new Blob([legacy.bytes]) }];
+    const edits = workspace?.edits;
+    state._workspaceId = workspace?.id ?? crypto.randomUUID();
+    state._queue = photos.map(p => new File([p.blob], p.name, { lastModified: p.lastModified ?? Date.now() }));
+    state._current = Math.max(0, Math.min(state._queue.length - 1, edits?.current ?? 0));
+    state._perImage = state._queue.map((f, i) => edits?.perImage?.[i] ?? { vibeId: state.activeVibe, adjust: { ...state.adjust }, ...snapshotPhotoLook() });
+    state._excluded = new Set((edits?.excluded ?? []).filter(i => i >= 0 && i < state._queue.length));
+    const per = state._perImage[state._current];
+    state.adjust = { ...(per?.adjust ?? defaultAdjust()) };
+    state.crop = per?.crop ? { ...per.crop } : defaultCropRect();
+    state.autoWb = per?.autoWb ?? defaultAutoWb();
     if (state._processor) state._processor.cameraWb = state.autoWb;
-    syncAutoWbUI();
-    _pixelCache.clear();
+    await restorePhotoLook(per);
+    await ensureLutByPath(state.config?.lut_path);
+    syncUserSettingsToProcessor(); syncAutoWbUI(); _syncCoreSliders();
     updateBatchButton(); renderPhotoStrip();
-    await openImage(rec.bytes, rec.name, { fromResume: true });
-    resetHistory();
+    const f = state._queue[state._current];
+    await openImage(f, f.name, { fromResume: true, fromStrip: true, queueIndex: state._current });
+    const turns = (((per?.rotation ?? 0) % 4) + 4) % 4;
+    for (let t = 0; t < turns; t++) state._processor.rotateClockwise();
+    if (turns) triggerRender(false);
+    resetHistory(); generateThumbs();
+    if (!workspace?.photos?.length) persistWorkspaceFiles(); // migrate old Resume data
   } catch (err) {
-    hideLoading();
-    console.error('[app] resume failed:', err);
-    showToast('Could not resume', 3000, true);
+    console.warn('[app] Could not restore editor:', err);
+    showToast('Could not restore your last photo. Import photos to continue.', 4000, true);
+  } finally {
+    hideLoading(); openBtn.disabled = false; heroOpenBtn.disabled = false;
   }
-});
+}
+
+// Flush small edit snapshots when the app is backgrounded, without rewriting originals.
+document.addEventListener('visibilitychange', () => { if (document.hidden) persistWorkspaceEdits(); });
+window.addEventListener('pagehide', persistWorkspaceEdits);
 
 /** Show the FULL filename in the file-info row (it wraps rather than cuts). */
 function setFilename(name) {
@@ -2464,6 +2504,7 @@ document.addEventListener('pointerdown', e => {
 // ── Unified export function ───────────────────────────────────────────────────
 async function doExport(format) {
   if (!state.hasImage || !state.processorReady || _exporting) return;
+  persistWorkspaceEdits();
   _exporting = true;
   if (format === 'tiff') {
     try {
@@ -2811,6 +2852,7 @@ $('exclude-sel-btn')?.addEventListener('click', () => {
     photoStrip?.querySelectorAll('.strip-thumb')[i]?.classList.toggle('excluded', state._excluded.has(i));
   }
   updateBatchButton();
+  persistWorkspaceEdits();
   showToast(anyExcluded ? `Included ${state._selected.size}` : `Excluded ${state._selected.size} from export`);
 });
 $('remove-sel-btn')?.addEventListener('click', async () => {
@@ -3621,7 +3663,7 @@ if (_startPreset) {
 
 // Custom LUT pills load async from IndexedDB; re-apply a restored LUT override
 // once they exist (falls back to the vibe's factory LUT if it was deleted).
-renderLutPills().then(async () => {
+const restoredLutPills = renderLutPills().then(async () => {
   if (_sessionCurrent && _session?.activeLutId && !_startPreset) {
     const rec = await getCustomLut(_session.activeLutId);
     if (rec) applyCustomLut(rec);
@@ -3631,7 +3673,7 @@ renderLutPills().then(async () => {
 // Disable export button until image loaded
 if (exportBtn) exportBtn.disabled = true;
 
-showResumeIfAvailable();
+startInEditor();
 
 // Show the build stamp on the empty state so a deploy can be confirmed synced.
 const buildId = (typeof __BUILD_ID__ !== 'undefined') ? __BUILD_ID__ : 'dev';
@@ -3656,12 +3698,10 @@ if (settingsVersion) settingsVersion.textContent = versionLabel;
 const whatsNewVersion = $('whatsnew-version');
 if (whatsNewVersion) whatsNewVersion.textContent = buildId;
 
-// Auto-show the patch notes once after an update (version string changed since
-// last launch). Skipped on a first-ever install (no prior version stored).
+// Record the build without interrupting startup; release notes stay in Settings.
 try {
   const KEY = 'flashback:lastSeenVersion';
-  const seen = localStorage.getItem(KEY);
-  if (seen && seen !== buildId) setTimeout(() => openWhatsNew(), 600);
+  // Release notes open from Help / Settings.
   localStorage.setItem(KEY, buildId);
 } catch { /* storage unavailable — skip */ }
 

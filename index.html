@@ -31,7 +31,6 @@
   ══════════════════════════════════════════════════════════ -->
   <div id="canvas-wrap">
     <canvas id="preview-canvas" aria-label="Image preview"></canvas>
-  </div>
 
   <!-- ══════════════════════════════════════════════════════════
        EMPTY STATE — shown before any file is loaded
@@ -56,19 +55,12 @@
         <circle cx="40" cy="40" r="7"  fill="currentColor" opacity="0.25"/>
       </svg>
     </div>
-    <h1>Flashback</h1>
-    <p>One35 v2 RAW Editor</p>
+    <h1>Import your photos</h1>
     <button id="hero-open-btn" class="btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
       </svg>
-      Open Files
-    </button>
-    <button id="resume-btn" class="btn-secondary hidden">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8"/><path d="M3 3v5h5"/>
-      </svg>
-      <span id="resume-label">Resume last photo</span>
+      Import photos
     </button>
     <p class="empty-hint">
       One35 DNG, other RAW formats, or JPEG.<br>
@@ -82,6 +74,8 @@
               aria-label="Reload app" title="Reload to get the latest version">⟳ Reload</button>
     </div>
   </div>
+
+  </div><!-- /#canvas-wrap -->
 
   <!-- Update-available banner (shown when a new service worker is waiting) -->
   <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
@@ -101,13 +95,14 @@
   <!-- ══════════════════════════════════════════════════════════
        TOP BAR
   ══════════════════════════════════════════════════════════ -->
-  <header id="top-bar" class="hidden">
+  <header id="top-bar">
     <div class="bar-left">
-      <button id="open-btn" class="icon-btn" aria-label="Open file" title="Open file">
+      <button id="open-btn" class="icon-btn import-button" aria-label="Import photos" title="Import photos">
         <!-- Folder icon -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
         </svg>
+        <span class="import-label">Import</span>
       </button>
     </div>
     <div class="bar-right">
@@ -203,7 +198,7 @@
        The effects panel overlays ONLY the controls area below the
        filmstrip; the photo and strip never move or shrink.
   ══════════════════════════════════════════════════════════ -->
-  <div id="controls" class="hidden">
+  <div id="controls">
 
     <!-- Photo strip: filmstrip of loaded files (shown with >1 file) -->
     <div id="photo-strip" class="hidden" role="listbox" aria-label="Loaded photos"></div>
@@ -513,7 +508,7 @@
 
         <section>
           <h3>Opening photos</h3>
-          <p>Tap <b>Open Files</b> and pick from your phone. It opens:</p>
+          <p>Tap <b>Import</b> and pick from your phone. It opens:</p>
           <ul>
             <li><b>One35 v2 DNG</b> — the native format the app is calibrated for. Best results.</li>
             <li><b>Other RAW</b> (CR2/CR3, NEF, ARW, RAF, RW2, ORF, and more) — <b>experimental</b>.
@@ -670,7 +665,7 @@
         <section>
           <h3>Getting photos onto the phone</h3>
           <p>Connect the One35 v2 via USB-C, copy the DNGs into the Files app (or iCloud
-          Drive), then tap <b>Open Files</b>. Safari can't talk to the camera over USB
+          Drive), then tap <b>Import</b>. Safari can't talk to the camera over USB
           directly. Photos already on your phone (other RAW or JPEG) open the same way.</p>
         </section>
 
