@@ -143,13 +143,14 @@
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
         </svg>
       </button>
-      <button id="zen-btn" class="icon-btn" aria-label="Toggle zen mode" title="Zen mode">
-        <!-- Expand icon -->
+      <div id="desktop-zoom" role="group" aria-label="Photo zoom">
+        <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+        <button id="zoom-percent" type="button" title="Reset zoom to 100%" aria-label="Reset zoom">100%</button>
+        <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+      </div>
+      <button id="fullscreen-btn" class="icon-btn" aria-label="Enter fullscreen" aria-pressed="false" title="Fullscreen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 3 21 3 21 9"/>
-          <polyline points="9 21 3 21 3 15"/>
-          <line x1="21" y1="3" x2="14" y2="10"/>
-          <line x1="3" y1="21" x2="10" y2="14"/>
+          <path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>
         </svg>
       </button>
       <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Settings">
@@ -593,7 +594,8 @@
         <section>
           <h3>Gestures</h3>
           <ul>
-            <li><b>Tap</b> the photo — hide / show the controls (zen).</li>
+            <li><b>Fullscreen</b> in the header hides browser tabs while keeping editing controls visible.</li>
+            <li><b>Desktop zoom</b> — use − / + in the header. Double-click a photo area to zoom to 250%; double-click again to return to 100%.</li>
             <li><b>Press &amp; hold</b> the photo — peek at the un-edited original.</li>
             <li><b>Pinch</b> — zoom in; drag to pan; double-tap to fit.</li>
           </ul>

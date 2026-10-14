@@ -109,7 +109,7 @@ whole roll. Exclude or remove photos in bulk, then export only the ones you want
 Exposure, white balance, tint, and push/pull. Crop and straighten (±45°) with aspect
 presets and auto cover-scaling. Date and frame-number stamps styled like a 2000s camera's
 date-back. A histogram, before/after compare (just press and hold), pinch-to-zoom that
-stays in the photo, rotate, and a distraction-free zen mode.
+stays in the photo, rotate, browser fullscreen, and desktop zoom controls. Double-click an area to zoom to 250%; double-click again to return to 100%.
 
 ### Open more than DNG
 Since 1.3.0: other RAW formats (CR2/CR3, NEF, ARW, RAF, RW2, ORF and more) and JPEG/PNG

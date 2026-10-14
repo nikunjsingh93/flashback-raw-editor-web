@@ -486,7 +486,7 @@ body.staging .version-tag { color: #34c759; font-weight: 600; }
   border: 1px solid var(--accent-dim);
   border-radius: 8px;
   z-index: 40;
-  pointer-events: none;       /* never blocks canvas taps (zen toggle) */
+  pointer-events: none;       /* never blocks preview gestures */
   image-rendering: auto;
 }
 
@@ -1153,26 +1153,6 @@ body.staging .version-tag { color: #34c759; font-weight: 600; }
   opacity: 0.35;
   cursor: not-allowed;
 }
-
-/* ╔══════════════════════════════════════════════════════════╗
-   ║  ZEN MODE (canvas tap to show/hide controls)             ║
-   ║  Bars leave the flow entirely so the photo region grows  ║
-   ║  to the full screen (JS re-renders on toggle).           ║
-   ╚══════════════════════════════════════════════════════════╝ */
-/* Full screen keeps ONLY the photo + the filmstrip (swipe through photos while
-   full screen). Everything else leaves the flow; the controls block stays but
-   sheds its chrome so just the strip remains. */
-body.zen #top-bar        { display: none; }
-body.zen #file-info      { display: none; }
-body.zen #look-tools-row { display: none; }
-body.zen #controls-stack { display: none; }
-body.zen #controls {
-  background: transparent;
-  border-top: none;
-  padding-top: 0;
-}
-/* With a single photo the strip is hidden anyway, so the controls block
-   collapses to nothing and the photo truly fills the screen. */
 
 /* ╔══════════════════════════════════════════════════════════╗
    ║  TOAST NOTIFICATIONS                                     ║
@@ -2100,10 +2080,6 @@ body.zen #controls {
   .desktop-layout .export-group { width: 100%; }
   .desktop-layout .btn-export { flex: 1; padding: 0 12px; font-size: 11px; }
   .desktop-layout #format-picker { position: fixed; left: 20px; right: auto; bottom: 74px; }
-  body.zen #app.desktop-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-  body.zen .desktop-layout #canvas-wrap { grid-column: 1; grid-row: 1; }
-  body.zen .desktop-layout #controls { display: none; }
-  body.zen .desktop-layout > #photo-strip { grid-column: 1; grid-row: 2; }
 }
 
 /* Import is part of the editing workspace, including on first launch. */
@@ -2123,3 +2099,10 @@ body.zen #controls {
 .strip-clear:hover, .strip-clear:focus-visible { color: var(--danger); border-color: var(--danger); }
 
 .strip-item .strip-thumb { display: block; }
+
+#desktop-zoom { display: none; align-items: center; gap: 2px; margin: 0 8px; }
+#desktop-zoom button { height: 32px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
+#zoom-out, #zoom-in { width: 32px; font-size: 19px; }
+#zoom-percent { width: 62px; font-family: var(--font-mono); font-size: 11px; }
+#desktop-zoom button:disabled { opacity: .4; cursor: default; }
+@media (min-width: 1024px) { #desktop-zoom { display: flex; } }

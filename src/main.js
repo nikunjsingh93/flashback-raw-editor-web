@@ -3,7 +3,7 @@
  *
  * Responsibilities:
  *  - Register service worker
- *  - Wire up all UI interactions (file open, zen mode, vibe strip, sliders, effects panel)
+ *  - Wire up all UI interactions (file open, fullscreen, vibe strip, sliders, effects panel)
  *  - Detect WebGPU support and show appropriate UI state
  *  - Delegate to processor (Phase 2+) when a file is loaded
  */
@@ -55,7 +55,6 @@ const state = {
   saturation:   1,        // global saturation (persisted)
   dateFormat:   'YYMMDD', // 'YYMMDD' | 'YYMM' (persisted)
   hasImage:     false,
-  isZen:        false,
   effectsOpen:  false,
   histOpen:     false,
   crop:         { angle: 0, x: 0, y: 0, w: 1, h: 1 },  // straighten + crop (per-image)
@@ -93,7 +92,7 @@ const canvas          = $('preview-canvas');
 const heroOpenBtn     = $('hero-open-btn');
 const openBtn         = $('open-btn');
 const rotateBtn       = $('rotate-btn');
-const zenBtn          = $('zen-btn');
+const fullscreenBtn   = $('fullscreen-btn');
 const histBtn         = $('hist-btn');
 const histCanvas      = $('histogram');
 const effectsBtn      = $('effects-btn');
@@ -1282,17 +1281,25 @@ function syncEffectSliders() {
   }
 }
 
-// ─── Zen Mode ─────────────────────────────────────────────────────────────────
+// Browser fullscreen keeps the editor controls and hides browser chrome.
+fullscreenBtn.addEventListener('click', async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+    else showToast('Fullscreen is unavailable in this browser. Install the app to open it without browser tabs.', 5000);
+  } catch { showToast('Could not enter fullscreen. Try opening the app in Chrome or Edge.', 4000, true); }
+});
+document.addEventListener('fullscreenchange', () => {
+  const on = !!document.fullscreenElement;
+  fullscreenBtn.classList.toggle('active', on);
+  fullscreenBtn.setAttribute('aria-pressed', String(on));
+  fullscreenBtn.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
+  fullscreenBtn.title = on ? 'Exit fullscreen' : 'Fullscreen';
+});
 
-zenBtn?.addEventListener('click', toggleZen);
-
-// Tap canvas to toggle zen when image is loaded. A press-and-hold (compare
-// gesture) sets _suppressClick so the release doesn't also toggle zen.
-canvas?.addEventListener('click', () => {
+canvas.addEventListener('click', () => {
   if (_suppressClick) { _suppressClick = false; return; }
-  if (zoom.scale > 1.01) return;                 // tapping while zoomed shouldn't toggle zen
-  if (state.effectsOpen) { setEffectsOpen(false); return; }  // tap photo = dismiss sheet
-  if (state.hasImage) toggleZen();
+  if (zoom.scale <= 1.01 && state.effectsOpen) setEffectsOpen(false);
 });
 
 // ─── Before/after compare (press & hold) ──────────────────────────────────────
@@ -1353,8 +1360,51 @@ function applyZoom() {
   canvas.style.transform = (zoom.scale === 1 && zoom.tx === 0 && zoom.ty === 0)
     ? ''
     : `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})`;
+  syncZoomControls();
 }
 function resetZoom() { zoom.scale = 1; zoom.tx = 0; zoom.ty = 0; applyZoom(); }
+function syncZoomControls() {
+  $('zoom-percent').textContent = Math.round(zoom.scale * 100) + '%';
+  $('zoom-out').disabled = !state.hasImage || zoom.scale <= 1;
+  $('zoom-in').disabled = !state.hasImage || zoom.scale >= 6;
+  $('zoom-percent').disabled = !state.hasImage;
+  canvas.style.cursor = zoom.scale > 1 ? 'grab' : '';
+}
+function setPhotoZoom(scale, clientX, clientY) {
+  if (!state.hasImage) return;
+  const rect = $('canvas-wrap').getBoundingClientRect();
+  const px = (clientX ?? rect.left + rect.width / 2) - rect.left - rect.width / 2;
+  const py = (clientY ?? rect.top + rect.height / 2) - rect.top - rect.height / 2;
+  const next = Math.max(1, Math.min(6, scale));
+  zoom.tx = px - (px - zoom.tx) * next / zoom.scale;
+  zoom.ty = py - (py - zoom.ty) * next / zoom.scale;
+  zoom.scale = next;
+  if (next === 1) { zoom.tx = 0; zoom.ty = 0; }
+  applyZoom();
+}
+$('zoom-in').addEventListener('click', () => setPhotoZoom(zoom.scale + 0.25));
+$('zoom-out').addEventListener('click', () => setPhotoZoom(zoom.scale - 0.25));
+$('zoom-percent').addEventListener('click', resetZoom);
+canvas.addEventListener('dblclick', event => {
+  if (!desktopLayout.matches || !state.hasImage) return;
+  event.preventDefault(); endCompare();
+  if (zoom.scale > 1.01) resetZoom();
+  else setPhotoZoom(2.5, event.clientX, event.clientY);
+});
+let mousePan = null;
+canvas.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'mouse' || event.button !== 0 || zoom.scale <= 1) return;
+  mousePan = { x: event.clientX, y: event.clientY, tx: zoom.tx, ty: zoom.ty };
+  canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
+});
+canvas.addEventListener('pointermove', event => {
+  if (!mousePan) return;
+  zoom.tx = mousePan.tx + event.clientX - mousePan.x;
+  zoom.ty = mousePan.ty + event.clientY - mousePan.y; applyZoom(); canvas.style.cursor = 'grabbing';
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(type, () => { mousePan = null; syncZoomControls(); });
+syncZoomControls();
+
 function touchDist(t) {
   return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 }
@@ -1383,8 +1433,7 @@ canvas?.addEventListener('touchmove', (e) => {
     if (zoom.scale === 1) { zoom.tx = 0; zoom.ty = 0; }
     _moved = true;
     applyZoom();
-    // Pinch zooms within the photo region only — it no longer auto-enters zen
-    // (fullscreen). Zen stays an explicit gesture (zen button, or tap at 1×).
+    // Photo zoom stays inside the preview; browser fullscreen is explicit.
     e.preventDefault();
   } else if (e.touches.length === 1 && zoom.scale > 1) {
     zoom.tx = _panTx + (e.touches[0].clientX - _panX);
@@ -1419,15 +1468,6 @@ document.addEventListener('touchend', (e) => {
   if (now - _lastTouchEnd < 300) e.preventDefault();   // double-tap → no page zoom
   _lastTouchEnd = now;
 }, { passive: false });
-
-function toggleZen() {
-  state.isZen = !state.isZen;
-  document.body.classList.toggle('zen', state.isZen);
-  // Reading clientWidth below forces the relayout, then we redraw the cached
-  // frame at the new size in the SAME step — no stretch/squash while resizing.
-  relayoutCanvas();
-  if (state.isZen) showToast('Full screen — tap photo to exit', 1600);
-}
 
 // ─── Histogram (opt-in) ───────────────────────────────────────────────────────
 
@@ -1930,7 +1970,7 @@ async function removeFromQueue(idx) {
       if (turns) triggerRender(false);
     }
   } else if (!state._queue.length) {
-    state.hasImage = false; state._lastImageData = null; state._currentMeta = []; exportBtn.disabled = true;
+    state.hasImage = false; state._lastImageData = null; state._currentMeta = []; resetZoom(); exportBtn.disabled = true;
     emptyState.classList.remove('hidden'); $('file-info').classList.add('hidden');
     const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -3624,7 +3664,7 @@ async function drawToCanvas(imageData, opts = {}) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(bmp, dx, dy, dw, dh);
-  // Cache the drawn frame so a SIZE-only change (zen toggle, resize) can be
+  // Cache the drawn frame so a SIZE-only change (fullscreen, resize) can be
   // re-letterboxed synchronously — no stale-bitmap stretch while the GPU
   // re-renders. (Replaces the previous bmp.close().)
   state._lastBmp?.close();
@@ -3677,7 +3717,7 @@ window.addEventListener('resize', () => {
 });
 
 // The canvas's flex region also changes without a window resize — the photo
-// strip appearing, zen toggling, orientation chrome. Repaint whenever its CSS
+// strip appearing, fullscreen changes, orientation chrome. Repaint whenever its CSS
 // box actually changes (debounced; backing-store writes don't affect the box).
 if (window.ResizeObserver) {
   let _roTimer = null;
