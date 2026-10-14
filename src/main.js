@@ -1738,7 +1738,7 @@ function renderPhotoStrip() {
   if (!photoStrip) return;
   photoStrip.innerHTML = '';
   const files = state._queue ?? [];
-  if (files.length < 2) { photoStrip.classList.add('hidden'); return; }
+  if (!files.length) { photoStrip.classList.add('hidden'); return; }
   files.forEach((f, i) => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -1824,9 +1824,44 @@ function renderPhotoStrip() {
       });
       if (ok) removeFromQueue(i);
     });
-    photoStrip.appendChild(btn);
+    const item = document.createElement('div');
+    item.className = 'strip-item';
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'strip-remove'; remove.textContent = '×';
+    remove.title = 'Remove ' + f.name;
+    remove.setAttribute('aria-label', 'Remove photo ' + (i + 1) + ': ' + f.name);
+    remove.addEventListener('click', async () => {
+      if (_exporting) return;
+      const ok = await showDialog({ title: 'Remove photo', message: f.name + '\nRemove from this editor. Your original file on disk is kept.', confirmLabel: 'Remove', danger: true });
+      if (ok) await removeFromQueue(i);
+    });
+    item.append(btn, remove); photoStrip.appendChild(item);
   });
+  const clear = document.createElement('button');
+  clear.type = 'button'; clear.className = 'strip-clear'; clear.textContent = 'Clear all';
+  clear.setAttribute('aria-label', 'Remove all photos from editor');
+  clear.addEventListener('click', async () => {
+    if (_exporting) return;
+    const ok = await showDialog({ title: 'Clear all photos', message: 'Remove ' + files.length + (files.length === 1 ? ' photo' : ' photos') + ' from this editor? Your original files on disk are kept.', confirmLabel: 'Clear all', danger: true });
+    if (ok) clearPhotoQueue();
+  });
+  photoStrip.appendChild(clear);
   photoStrip.classList.remove('hidden');
+}
+
+function clearPhotoQueue() {
+  if (_exporting) return;
+  _thumbToken++; _navToken++; _renderGen++; clearTimeout(_idleTimer); clearTimeout(_persistTimer);
+  state._queue = []; state._perImage = []; state._current = 0;
+  state._excluded.clear(); _pixelCache.clear(); _previewCache.clear();
+  state.hasImage = false; state._lastImageData = null; state._currentMeta = [];
+  state.crop = defaultCropRect();
+  if (state._processor) state._processor._origBuffer = null;
+  disarmCopy(); exitSelectMode(); resetZoom();
+  exportBtn.disabled = true; emptyState.classList.remove('hidden'); $('file-info').classList.add('hidden');
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  updateBatchButton(); renderPhotoStrip(); persistWorkspaceFiles();
+  showToast('All photos removed from editor');
 }
 
 /** Update just the vibe badge on one strip thumbnail without re-rendering the strip. */
@@ -1843,6 +1878,7 @@ async function removeFromQueue(idx) {
   if (_exporting || !state._queue?.length) return;
   const removed = state._queue[idx]?.name ?? 'photo';
   const wasCurrent = (idx === state._current);
+  _navToken++; _renderGen++; clearTimeout(_idleTimer);
   // Abort the background thumbnail decoder — it holds old queue indices and
   // would call drawThumbAt(i, …) with stale i values after the splice, overwriting
   // the freshly re-indexed thumbnails with data from the wrong slot.
@@ -1894,7 +1930,7 @@ async function removeFromQueue(idx) {
       if (turns) triggerRender(false);
     }
   } else if (!state._queue.length) {
-    state.hasImage = false; exportBtn.disabled = true;
+    state.hasImage = false; state._lastImageData = null; state._currentMeta = []; exportBtn.disabled = true;
     emptyState.classList.remove('hidden'); $('file-info').classList.add('hidden');
     const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -2201,6 +2237,8 @@ let _foreignNoticeShown = false;
 let _imageLoads = 0;
 async function openImage(source, name, opts = {}) {
   _imageLoads++;
+  const loadGeneration = _renderGen;
+  const queuedFile = typeof opts.queueIndex === 'number' ? state._queue[opts.queueIndex] : null;
   if (!opts.quiet) showLoading(`Reading ${name}…`);
   try {
     const buffer = source instanceof ArrayBuffer ? source : await source.arrayBuffer();
@@ -2221,6 +2259,7 @@ async function openImage(source, name, opts = {}) {
         drawThumbAt(opts.queueIndex, decoded);
       }
     }
+    if (typeof opts.queueIndex === 'number' && (loadGeneration !== _renderGen || state._queue[opts.queueIndex] !== queuedFile)) return;
     const result = await state._processor.loadDecoded(decoded, name, buffer);
 
     // Persistent "EXP" marker: anything that isn't a calibrated One35 decode
@@ -2245,7 +2284,7 @@ async function openImage(source, name, opts = {}) {
       hideLoading();
       // Stale guard: user navigated away while this was loading — discard the draw
       // so we don't paint an old photo over whichever photo is now on screen.
-      const isStale = typeof opts.queueIndex === 'number' && opts.queueIndex !== state._current;
+      const isStale = typeof opts.queueIndex === 'number' && (opts.queueIndex !== state._current || loadGeneration !== _renderGen || state._queue[opts.queueIndex] !== queuedFile);
       if (result && !isStale) {
         _previewCachePut(opts.queueIndex, result);
         await drawToCanvas(result);

@@ -2114,3 +2114,12 @@ body.zen #controls {
 .import-button { width: auto; gap: 8px; padding: 0 12px; }
 .import-label { font-size: 12px; font-weight: 600; }
 @media (max-width: 599px) { .import-label { display: none; } .import-button { width: 40px; padding: 0; } }
+
+/* Visible filmstrip actions also work for a single imported photo. */
+.strip-item { position: relative; flex: 0 0 auto; }
+.strip-remove { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(13,13,13,.85); color: #eee; font-size: 19px; line-height: 1; cursor: pointer; z-index: 1; }
+.strip-remove:hover, .strip-remove:focus-visible { background: var(--danger); color: #fff; }
+.strip-clear { flex: 0 0 auto; position: sticky; right: 0; align-self: center; margin-left: auto; padding: 9px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text-dim); font-size: 12px; cursor: pointer; z-index: 2; }
+.strip-clear:hover, .strip-clear:focus-visible { color: var(--danger); border-color: var(--danger); }
+
+.strip-item .strip-thumb { display: block; }
