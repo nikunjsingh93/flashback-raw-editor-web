@@ -334,6 +334,7 @@
 
     <div id="controls-main">
 
+    <h2 class="desktop-section-label film-heading">Film looks</h2>
     <!-- Vibe strip -->
     <div id="vibe-strip" role="tablist" aria-label="Film vibes">
       <button class="vibe-pill active" role="tab" aria-selected="true"  data-vibe="natural">Natural</button>
@@ -349,13 +350,14 @@
               aria-label="Save current look as a preset" title="Save preset">＋</button>
     </div>
 
+    <h2 class="desktop-section-label adjustments-heading">Basic adjustments</h2>
     <!-- Core sliders: Exposure, White Balance, Tint -->
     <div id="core-sliders">
 
       <div class="slider-row"
            data-param="exposure"
            data-min="-3" data-max="3" data-step="0.05" data-value="0">
-        <span class="slider-label">EXP</span>
+        <span class="slider-label"><span class="mobile-label">EXP</span><span class="desktop-label">Exposure</span></span>
         <div class="slider-track"><div class="slider-fill"></div><div class="slider-thumb"></div></div>
         <span class="slider-val">0.0</span>
       </div>
@@ -363,7 +365,7 @@
       <div class="slider-row"
            data-param="wb_temp"
            data-min="-3000" data-max="3000" data-step="50" data-value="0">
-        <span class="slider-label">TEMP</span>
+        <span class="slider-label"><span class="mobile-label">TEMP</span><span class="desktop-label">Temperature</span></span>
         <div class="slider-track"><div class="slider-fill"></div><div class="slider-thumb"></div></div>
         <span class="slider-val">0</span>
       </div>
@@ -371,7 +373,7 @@
       <div class="slider-row"
            data-param="tint"
            data-min="-50" data-max="50" data-step="0.5" data-value="0">
-        <span class="slider-label">TINT</span>
+        <span class="slider-label"><span class="mobile-label">TINT</span><span class="desktop-label">Tint</span></span>
         <div class="slider-track"><div class="slider-fill"></div><div class="slider-thumb"></div></div>
         <span class="slider-val">0.0</span>
       </div>

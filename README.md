@@ -2,6 +2,8 @@
 
 [Open Flashback RAW Editor](https://nikunjsingh93.github.io/flashback-raw-editor-web/)
 
+On screens at least 1024 px wide, the editor places film looks, sliders and effects in a scrolling left sidebar, with the photo preview and filmstrip on the right. Smaller screens use the touch layout.
+
 ### Apply one film look to a roll and download ZIP
 
 Open several photos, choose a film (for example Disposable), then tap **Apply look to all** below the preview. This copies the current film look and adjustments while keeping each photo's crop, rotation and Auto WB. Tap **Download ZIP** to develop every included photo and save one archive of processed JPEGs (or TIFFs, selected in Settings or by long-pressing Download ZIP). Excluded photos stay out of the archive. All processing stays on your device.

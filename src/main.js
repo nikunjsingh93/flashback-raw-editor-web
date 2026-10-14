@@ -1678,6 +1678,16 @@ async function reloadCurrentPhoto() {
 // (the original's ImageAdjustments travel with the image the same way).
 
 const photoStrip = $('photo-strip');
+// Keep one filmstrip and one set of controls when switching between layouts.
+const desktopLayout = window.matchMedia('(min-width: 1024px)');
+function syncResponsiveLayout() {
+  const desktop = desktopLayout.matches;
+  $('app').classList.toggle('desktop-layout', desktop);
+  if (desktop && photoStrip.parentElement !== $('app')) $('app').appendChild(photoStrip);
+  else if (!desktop && photoStrip.parentElement !== controls) controls.prepend(photoStrip);
+}
+desktopLayout.addEventListener('change', syncResponsiveLayout);
+syncResponsiveLayout();
 
 const VIBE_ABBR = {
   natural: 'NT', disposable: 'DP', point_shoot: 'PS',
@@ -2850,7 +2860,7 @@ async function runBatch(overrideFormat) {
   resetZoom();   // a stale pinch-zoom shouldn't carry over onto batch images
   saveCurrentImageState();   // capture the on-screen photo's latest tweaks
   showProgress('Developing photos for ZIP…');
-  for (const id of ['controls', 'top-bar', 'look-tools-row']) $(id).inert = true;
+  for (const id of ['controls', 'top-bar', 'look-tools-row', 'photo-strip']) $(id).inert = true;
   const batchTotal = files.length - (state._excluded?.size ?? 0);
   let failed = 0, batchDone = 0;
   const originalIndex = state._current;
@@ -2942,7 +2952,7 @@ async function runBatch(overrideFormat) {
       markActiveThumb();
     } catch (err) { console.warn('[app] Could not restore preview:', err); }
     _exporting = false;
-    for (const id of ['controls', 'top-bar', 'look-tools-row']) $(id).inert = false;
+    for (const id of ['controls', 'top-bar', 'look-tools-row', 'photo-strip']) $(id).inert = false;
   }
 }
 

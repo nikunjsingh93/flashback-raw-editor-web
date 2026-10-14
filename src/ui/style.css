@@ -2049,3 +2049,59 @@ body.zen #controls {
   color: #e05252;
   border-color: #e05252;
 }
+
+/* Wide-screen editing workspace: independently scrolling controls beside photo. */
+.desktop-section-label, .desktop-label { display: none; }
+@media (min-width: 1024px) {
+  #app.desktop-layout {
+    display: grid;
+    grid-template-columns: clamp(320px, 26vw, 380px) minmax(0, 1fr);
+    grid-template-rows: calc(var(--header-h) + var(--sat)) minmax(0, 1fr) auto auto auto;
+  }
+  .desktop-layout #top-bar { grid-column: 1 / -1; grid-row: 1; }
+  .desktop-layout #canvas-wrap { grid-column: 2; grid-row: 2; min-width: 0; }
+  .desktop-layout #file-info { grid-column: 2; grid-row: 3; min-width: 0; padding: 9px 20px; }
+  .desktop-layout #look-tools-row { grid-column: 2; grid-row: 4; min-width: 0; padding: 10px 20px; }
+  .desktop-layout > #photo-strip { grid-column: 2; grid-row: 5; min-width: 0; padding: 14px 20px; background: var(--bg); }
+  .desktop-layout > #photo-strip .strip-thumb { width: 104px; height: 72px; }
+  .desktop-layout #controls {
+    grid-column: 1; grid-row: 2 / 6; min-width: 0; min-height: 0;
+    overflow-y: auto; overscroll-behavior: contain;
+    border-top: 0; border-right: 1px solid var(--border);
+    padding: 22px 20px 12px; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .desktop-layout #controls-stack { display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
+  .desktop-layout #controls-main { display: contents; }
+  .desktop-layout .desktop-section-label {
+    display: block; font-size: 11px; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--text-dim); margin: 0;
+  }
+  .desktop-layout .film-heading { order: 0; }
+  .desktop-layout #vibe-strip { order: 1; flex-wrap: wrap; overflow: visible; gap: 8px; padding: 0 0 18px; border-bottom: 1px solid var(--border); }
+  .desktop-layout .vibe-pill { border-radius: 8px; height: 36px; padding: 0 12px; font-size: 12px; }
+  .desktop-layout .adjustments-heading { order: 2; }
+  .desktop-layout #core-sliders { order: 3; padding-bottom: 12px; }
+  .desktop-layout .mobile-label { display: none; }
+  .desktop-layout .desktop-label { display: inline; }
+  .desktop-layout .slider-row { height: 52px; gap: 9px; }
+  .desktop-layout .slider-label { width: 80px; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
+  .desktop-layout #effects-panel, .desktop-layout #effects-panel.open {
+    order: 4; position: static; display: flex; animation: none; max-height: none;
+    flex: 0 0 auto; border-radius: 10px; overflow: hidden;
+  }
+  .desktop-layout #fx-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; padding: 12px; gap: 8px; }
+  .desktop-layout .fx-btn { width: 100%; height: 66px; border-width: 1px; }
+  .desktop-layout .fx-btn-label { max-width: 100%; }
+  .desktop-layout #action-bar {
+    order: 5; position: sticky; bottom: -12px; margin-top: auto; z-index: 6;
+    background: var(--bg); border-top: 1px solid var(--border); padding: 14px 0 12px;
+  }
+  .desktop-layout #effects-btn { display: none; }
+  .desktop-layout .export-group { width: 100%; }
+  .desktop-layout .btn-export { flex: 1; padding: 0 12px; font-size: 11px; }
+  .desktop-layout #format-picker { position: fixed; left: 20px; right: auto; bottom: 74px; }
+  body.zen #app.desktop-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  body.zen .desktop-layout #canvas-wrap { grid-column: 1; grid-row: 1; }
+  body.zen .desktop-layout #controls { display: none; }
+  body.zen .desktop-layout > #photo-strip { grid-column: 1; grid-row: 2; }
+}
