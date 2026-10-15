@@ -1604,10 +1604,10 @@ async function openFiles() {
         id: 'flashback-dng',          // browser persists THIS id's directory
         multiple: true,
         types: [{
-          description: 'RAW photo (DNG, CR2/CR3, NEF, ARW, RAF, …)',
-          // One MIME bucket carrying every RAW extension — keeps the picker's
-          // file filter in sync with RAW_RE without enumerating per-vendor MIMEs.
-          accept: { 'image/x-dcraw': RAW_EXTS.map((e) => '.' + e) },
+          description: 'Photos (RAW, JPEG, PNG, WebP)',
+          // Combined filter accepts RAW files and finished images together.
+
+          accept: { 'image/x-dcraw': RAW_EXTS.map((e) => '.' + e), 'image/jpeg': ['.jpg', '.jpeg', '.jpe'], 'image/png': ['.png'], 'image/webp': ['.webp'] },
         }],
       });
     } catch (err) {
@@ -1691,18 +1691,39 @@ function autoWbFor(i) {
   return state._perImage?.[i]?.autoWb ?? defaultAutoWb();
 }
 
-async function handleFiles(files) {
+let _importQueue = Promise.resolve();
+function handleFiles(files) {
+  const batch = [...files];
+  _importQueue = _importQueue.then(() => appendImportedFiles(batch)).catch(err => {
+    console.error('[app] Import failed:', err); showToast('Could not import photos', 4000, true);
+  });
+  return _importQueue;
+}
+async function appendImportedFiles(files) {
+  if (_exporting) { showToast('Finish exporting before importing more photos.', 3000); return; }
+  while (_imageLoads) await new Promise(resolve => setTimeout(resolve, 20));
   // Accept any LibRaw-decodable RAW (native One35 DNG + foreign formats) plus
   // finished images (JPEG/PNG/WebP) for the effects-only path.
   const valid = files.filter((f) => RAW_RE.test(f.name) || PHOTO_RE.test(f.name));
   if (!valid.length) {
-    showToast('Please open a RAW photo (DNG, CR2/CR3, NEF, ARW, RAF …) or a JPEG', 3500, true);
+    showToast('Choose RAW, JPEG, PNG or WebP photos.', 3500, true);
     return;
   }
 
   // Remember the whole selection: the first file opens in the editor, the rest
   // are reachable from the photo strip and included in batch export.
   valid.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  if (state._queue.length) {
+    saveCurrentImageState();
+    _thumbToken++;
+    state._queue.push(...valid);
+    state._perImage.push(...valid.map(() => ({ vibeId: state.activeVibe, ...snapshotPhotoLook(),
+      adjust: defaultAdjust(), crop: defaultCropRect(), rotation: 0, autoWb: defaultAutoWb() })));
+    updateBatchButton(); renderPhotoStrip(); redrawAllThumbs(); generateThumbs();
+    persistWorkspaceFiles();
+    showToast(valid.length + (valid.length === 1 ? ' photo added' : ' photos added'));
+    return;
+  }
   clearTimeout(_persistTimer);
   _workspaceEpoch++;
   state.hasImage = false;
@@ -3821,3 +3842,4 @@ console.log(`[app] Flashback RAW Editor ready — ${versionLabel}`);
 // Dev-only debug handle (never shipped): lets the dev console / test harness
 // poke app state and the processor directly.
 if (import.meta.env.DEV) window.__fb = { state, triggerRender: (i) => triggerRender(i) };
+
