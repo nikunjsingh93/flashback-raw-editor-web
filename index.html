@@ -186,6 +186,7 @@
       <button id="select-all-btn" class="look-tool-btn hidden" type="button" aria-label="Select all photos" title="Select all photos">Select All</button>
       <button id="exclude-sel-btn" class="look-tool-btn hidden" type="button" aria-label="Exclude selected from export" title="Exclude/include selected from batch export">Exclude</button>
       <button id="remove-sel-btn" class="look-tool-btn hidden" type="button" aria-label="Remove selected from queue" title="Remove selected photos">Remove</button>
+      <button id="gallery-btn" class="look-tool-btn" type="button">Open gallery</button>
       <button id="select-btn" class="look-tool-btn hidden" type="button" aria-label="Select photos" title="Select multiple photos">Select</button>
     </div>
     <div id="look-tools-right">
@@ -396,6 +397,21 @@
     </div><!-- /#controls-stack -->
 
   </div><!-- /#controls -->
+
+  <section id="gallery-view" class="hidden" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
+    <header class="gallery-header">
+      <h2 id="gallery-title">Gallery</h2>
+      <button id="gallery-close" type="button" class="look-tool-btn">Back to editor</button>
+    </header>
+    <div class="gallery-actions">
+      <button id="gallery-select-all" class="look-tool-btn" type="button">Select all</button>
+      <span id="gallery-count" role="status"></span>
+      <button id="gallery-delete" class="look-tool-btn" type="button" disabled>Remove selected</button>
+      <button id="gallery-download" class="look-tool-btn" type="button" disabled>Download ZIP</button>
+    </div>
+    <div id="gallery-grid"></div>
+    <p id="gallery-empty" class="hidden">No photos. Return to the editor to import photos.</p>
+  </section>
 
   <!-- ══════════════════════════════════════════════════════════
        CROP & STRAIGHTEN EDITOR

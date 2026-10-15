@@ -4,7 +4,7 @@
 
 Install from **Settings → Install app**. Chrome/Edge can show a native install prompt; other browsers show instructions. The offline worker caches the editor, RAW decoder and bundled film assets while online. Installed apps support both portrait and landscape.
 
-The app opens straight into the editor and automatically restores the last photo, imported filmstrip and per-photo edits stored on this device. Import is in the editor toolbar and the empty preview area. Additional imports append to the filmstrip and keep existing photos and edits. The file picker accepts RAW, JPEG, PNG and WebP together. The filmstrip appears for one or more photos; use a thumbnail’s × to remove it, or Clear all to empty the editor. Original files on disk are kept.
+The app opens straight into the editor and automatically restores the last photo, imported filmstrip and per-photo edits stored on this device. Import is in the editor toolbar and the empty preview area. Additional imports append to the filmstrip and keep existing photos and edits. The file picker accepts RAW, JPEG, PNG and WebP together. Use Left/Right arrows to switch photos. Open gallery beside Select to view all photos, select a subset, remove it or download its processed ZIP. The filmstrip appears for one or more photos; use a thumbnail’s × to remove it, or Clear all to empty the editor. Original files on disk are kept.
 
 On screens at least 1024 px wide, the editor places film looks, sliders and effects in a scrolling left sidebar, with the photo preview and filmstrip on the right. Smaller screens use the touch layout.
 

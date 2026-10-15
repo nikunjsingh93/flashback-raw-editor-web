@@ -2163,6 +2163,7 @@ async function generateThumbs() {
 function drawThumbAt(i, decoded) {
   const cvs = photoStrip?.querySelectorAll('.strip-thumb canvas')[i];
   if (cvs) drawThumb(cvs, decoded);
+  drawGalleryThumb(i, decoded);
 }
 
 /** Re-draw all strip thumbnails from the pixel cache (called after index shifts). */
@@ -2730,7 +2731,7 @@ function updateLookToolsUI() {
   }
   // The look-tools row only appears with 2+ photos now (single-photo undo lives
   // on the filename row).
-  $('look-tools-row')?.classList.toggle('hidden', !multi);
+  $('look-tools-row')?.classList.toggle('hidden', !n);
   // Apply only shows when there's a real target that ISN'T the source: in select
   // mode, a selected non-source photo; otherwise the current photo ≠ source. When
   // you're sitting on the source, only "Apply all" shows — nudging you to pick
@@ -2742,6 +2743,7 @@ function updateLookToolsUI() {
   show('paste-look-btn', armed && hasApplyTarget && multi);
   show('paste-all-btn', !sel && multi); // directly applies the current look when no copy is armed
   show('select-btn', multi);
+  show('gallery-btn', n > 0);
   show('select-all-btn', sel);
   show('exclude-sel-btn', sel);
   show('remove-sel-btn', sel);
@@ -3003,6 +3005,116 @@ $('remove-sel-btn')?.addEventListener('click', async () => {
 });
 
 
+// Gallery selection is independent of the editor's batch-exclusion flags.
+const galleryView = $('gallery-view');
+const gallerySelected = new Set();
+let galleryBusy = false;
+function syncGallerySelection() {
+  const total = state._queue.length, count = gallerySelected.size;
+  $('gallery-count').textContent = count + ' of ' + total + ' selected';
+  $('gallery-select-all').textContent = total && count === total ? 'Deselect all' : 'Select all';
+  $('gallery-select-all').disabled = !total;
+  $('gallery-delete').disabled = !count;
+  $('gallery-download').disabled = !count;
+  $('gallery-download').textContent = count ? 'Download ZIP (' + count + ')' : 'Download ZIP';
+  $('gallery-grid').querySelectorAll('.gallery-card').forEach(card => {
+    const on = gallerySelected.has(Number(card.dataset.index));
+    card.classList.toggle('selected', on);
+    card.querySelector('input').checked = on;
+    card.querySelector('.gallery-preview').setAttribute('aria-pressed', String(on));
+  });
+}
+function drawGalleryThumb(i, decoded) {
+  if (galleryView.classList.contains('hidden')) return;
+  const target = $('gallery-grid').querySelector('[data-index="' + i + '"] canvas');
+  if (target) drawThumb(target, decoded);
+}
+function renderGallery() {
+  const grid = $('gallery-grid'); grid.replaceChildren();
+  state._queue.forEach((file, index) => {
+    const card = document.createElement('article'); card.className = 'gallery-card'; card.dataset.index = index;
+    const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'gallery-preview';
+    preview.setAttribute('aria-label', 'Select photo ' + (index + 1) + ': ' + file.name);
+    const image = document.createElement('canvas'); image.width = 360; image.height = 240; preview.append(image);
+    const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'gallery-check'; select.setAttribute('aria-label', 'Select ' + file.name);
+    const toggle = () => { if (gallerySelected.has(index)) gallerySelected.delete(index); else gallerySelected.add(index); syncGallerySelection(); };
+    preview.addEventListener('click', toggle); select.addEventListener('change', toggle);
+    const name = document.createElement('span'); name.className = 'gallery-name'; name.textContent = file.name; name.title = file.name;
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'look-tool-btn'; edit.textContent = 'Edit'; edit.setAttribute('aria-label', 'Edit ' + file.name);
+    edit.addEventListener('click', () => { closeGallery(); selectPhoto(index); });
+    card.append(preview, select, name, edit); grid.append(card);
+    const cached = cacheGet(index);
+    if (cached) drawThumb(image, cached);
+    else {
+      const strip = photoStrip.querySelectorAll('.strip-thumb canvas')[index];
+      if (strip) image.getContext('2d').drawImage(strip, 0, 0, image.width, image.height);
+    }
+  });
+  $('gallery-empty').classList.toggle('hidden', !!state._queue.length);
+  syncGallerySelection();
+}
+async function openGallery() {
+  if (_exporting) return;
+  while (_imageLoads) await new Promise(resolve => setTimeout(resolve, 20));
+  if (_exporting) return;
+  saveCurrentImageState(); gallerySelected.clear();
+  galleryView.classList.remove('hidden'); renderGallery();
+  $('gallery-close').focus(); generateThumbs();
+}
+function closeGallery() {
+  if (galleryBusy) return;
+  galleryView.classList.add('hidden'); (state._queue.length ? $('gallery-btn') : openBtn).focus();
+}
+$('gallery-btn').addEventListener('click', openGallery);
+$('gallery-close').addEventListener('click', closeGallery);
+$('gallery-select-all').addEventListener('click', () => {
+  if (gallerySelected.size === state._queue.length) gallerySelected.clear();
+  else state._queue.forEach((_, i) => gallerySelected.add(i));
+  syncGallerySelection();
+});
+$('gallery-delete').addEventListener('click', async () => {
+  const targets = [...gallerySelected].sort((a, b) => b - a);
+  if (!targets.length || galleryBusy) return;
+  const ok = await showDialog({ title: 'Remove selected photos', message: 'Remove ' + targets.length + ' selected photos from this editor? Your original files on disk are kept.', confirmLabel: 'Remove', danger: true });
+  if (!ok) return;
+  galleryBusy = true; galleryView.inert = true;
+  try {
+    if (targets.length === state._queue.length) clearPhotoQueue();
+    else for (const i of targets) await removeFromQueue(i);
+    gallerySelected.clear(); renderGallery();
+  } finally { galleryBusy = false; galleryView.inert = false; }
+});
+$('gallery-download').addEventListener('click', async () => {
+  if (!gallerySelected.size || galleryBusy) return;
+  galleryBusy = true; galleryView.inert = true;
+  try { await runBatch(undefined, [...gallerySelected]); }
+  finally { galleryBusy = false; galleryView.inert = false; }
+});
+let keyboardNavigating = false;
+document.addEventListener('keydown', async event => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  const modal = document.querySelector('.sheet.open, #settings-overlay.open, #crop-sheet:not(.hidden), #progress-overlay:not(.hidden)');
+  if (modal) return;
+  if (!galleryView.classList.contains('hidden')) {
+    if (event.key === 'Escape') { event.preventDefault(); closeGallery(); }
+    if (event.key === 'Tab') {
+      const focusable = [...galleryView.querySelectorAll('button:not(:disabled), input:not(:disabled)')];
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    return;
+  }
+  if (!['ArrowLeft', 'ArrowRight'].includes(event.key) || !state._queue.length || _exporting) return;
+  event.preventDefault();
+  if (keyboardNavigating || _imageLoads) return;
+  const next = state._current + (event.key === 'ArrowRight' ? 1 : -1);
+  if (next < 0 || next >= state._queue.length) return;
+  keyboardNavigating = true;
+  try { await selectPhoto(next); photoStrip.querySelectorAll('.strip-thumb')[next]?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+  finally { keyboardNavigating = false; }
+});
+
 // Export progress overlay (used by batch). Cancellable between files.
 let _cancelBatch = false;
 function showProgress(title) {
@@ -3021,10 +3133,11 @@ function setProgress(done, total, sub) {
 function hideProgress() { progressOverlay?.classList.add('hidden'); }
 progressCancel?.addEventListener('click', () => { _cancelBatch = true; progressCancel.textContent = 'Cancelling…'; });
 
-async function runBatch(overrideFormat) {
+async function runBatch(overrideFormat, selectedIndices = null) {
   if (_exporting) return;
   const files = state._queue ?? [];
-  if (files.length < 2) return;
+  const selected = selectedIndices ? new Set(selectedIndices.filter(i => Number.isInteger(i) && i >= 0 && i < files.length)) : null;
+  if (selected ? !selected.size : files.length < 2) return;
   if (!state.processorReady) { showToast('WebGPU unavailable — cannot export', 3000, true); return; }
 
   _exporting = true; _cancelBatch = false;
@@ -3035,7 +3148,7 @@ async function runBatch(overrideFormat) {
   saveCurrentImageState();   // capture the on-screen photo's latest tweaks
   showProgress('Developing photos for ZIP…');
   for (const id of ['controls', 'top-bar', 'look-tools-row', 'photo-strip']) $(id).inert = true;
-  const batchTotal = files.length - (state._excluded?.size ?? 0);
+  const batchTotal = selected ? selected.size : files.length - (state._excluded?.size ?? 0);
   let failed = 0, batchDone = 0;
   const originalIndex = state._current;
   const outFiles = [];   // everything is delivered at once at the end
@@ -3047,7 +3160,7 @@ async function runBatch(overrideFormat) {
     }
     for (let i = 0; i < files.length; i++) {
       if (_cancelBatch) break;
-      if (state._excluded?.has(i)) continue;
+      if (selected ? !selected.has(i) : state._excluded?.has(i)) continue;
       const f = files[i];
       state._current = i; // frame stamps and metadata belong to this export
       setProgress(batchDone, batchTotal, `Developing ${batchDone + 1} / ${batchTotal}: ${f.name}`);
@@ -3842,4 +3955,3 @@ console.log(`[app] Flashback RAW Editor ready — ${versionLabel}`);
 // Dev-only debug handle (never shipped): lets the dev console / test harness
 // poke app state and the processor directly.
 if (import.meta.env.DEV) window.__fb = { state, triggerRender: (i) => triggerRender(i) };
-
